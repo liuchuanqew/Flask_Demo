@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "blog/base.html" %}
 {% block title %}{{ post.title }}{% endblock %}
 {% block body %}
     <div class="row">
@@ -15,6 +15,11 @@
                             <a href="{{ url_for('.tag', tag_name=tag.title) }}">{{tag.title}}</a>
                         {% endfor %}
                     </p>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-lg-2">
+                    <a href="{{ url_for('.edit_post', id=post.id) }}" class="btn btn-primary">Edit</a>
                 </div>
             </div>
             <div class="row">

@@ -1,9 +1,11 @@
 import datetime
 from sqlalchemy import func
-from flask import render_template, Blueprint, redirect, url_for
-
-from webapp.models import db, Post, Tag, Comment, User, tags
+from flask import render_template, Blueprint, redirect, url_for, abort
+from flask_login import login_required, current_user
+from webapp.models import db, Post, Tag, Comment, User, tags, BlogPost, QuotePost, VideoPost, ImagePost
 from webapp.forms import CommentForm, PostForm
+from webapp.extensions import poster_permission, admin_permission
+from flask_principal import Permission, UserNeed
 
 blog_blueprint = Blueprint(
     'blog',
@@ -67,38 +69,61 @@ def post(post_id):
 
 
 @blog_blueprint.route('/new', methods=['GET', 'POST'])
+@login_required
 def new_post():
     form = PostForm()
 
     if form.validate_on_submit():
-        new_post = Post(form.title.data)
-        new_post.text = form.text.data
-        new_post.publish_date = datetime.datetime.now()
+        if form.type.data == "blog":
+            new_post = BlogPost()
+            new_post.text = form.text.data
+        elif form.type.data == "image":
+            new_post = ImagePost()
+            new_post.image_url = form.image.data
+        elif form.type.data == "video":
+            new_post = VideoPost()
+            new_post.video_object = form.video.data
+        elif form.type.data == "quote":
+            new_post = QuotePost()
+            new_post.text = form.text.data
+            new_post.author = form.author.data
 
-        db.session.add(new_post)
-        db.session.commit()
+        new_post.title = form.title.data
+        new_post.user = User.objects(
+            username=current_user.username
+        ).one()
+
+        new_post.save()
 
     return render_template('new.html', form=form)
 
 
 @blog_blueprint.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@poster_permission.require(http_exception=403)
 def edit_post(id):
     post = Post.query.get_or_404(id)
-    form = PostForm()
+    permission = Permission(UserNeed(post.user.id))
 
-    if form.validate_on_submit():
-        post.title = form.title.data
-        post.text = form.text.data
-        post.publish_date = datetime.datetime.now()
+    # We want admins to be able to edit any post
+    if permission.can() or admin_permission.can():
+        form = PostForm()
 
-        db.session.add(post)
-        db.session.commit()
+        if form.validate_on_submit():
+            post.title = form.title.data
+            post.text = form.text.data
+            post.publish_date = datetime.datetime.now()
 
-        return redirect(url_for('.post', post_id=post.id))
+            db.session.add(post)
+            db.session.commit()
 
-    form.text.data = post.text
+            return redirect(url_for('.post', post_id=post.id))
 
-    return render_template('edit.html', form=form, post=post)
+        form.text.data = post.text
+
+        return render_template('edit.html', form=form, post=post)
+
+    abort (403)
 
 
 @blog_blueprint.route('/tag/<string:tag_name>')
